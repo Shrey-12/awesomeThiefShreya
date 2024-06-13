@@ -1562,6 +1562,7 @@ exports.CropAndTagAllLiveVideo = async (req, res) => {
 														const extractedPath = 'public/mux_cut_video';
 														const fileName = cut_file_name;
 														await self.UploadAWSCutVideo(s3UploadPath, extractedPath, fileName);
+														//delete shreya
 
 														const cut_analysis_video = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/well_played_tournament/" + cut_file_name;
 														const cut_analysis_thumbnail = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/well_played_tournament/video_thumbnails" + cut_file_name;
@@ -2530,8 +2531,11 @@ exports.ExternalCropAndTagAllLiveVideo = async (req, res) => {
 													const fileName = cut_file_name;
 													await self.UploadAWSCutVideo(s3UploadPath, extractedPath, fileName);
 													// console.log('Uploaded AWS successfully converted');
+													//delete shreya
 													const cut_analysis_video = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/well_played_tournament/" + cut_file_name;
+													const cut_analysis_thumbnail = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/well_played_tournament/thumbnail" + cut_file_name;
 													await self.UpdateVideoUrlInAnalysis(analysis_id, cut_analysis_video)
+													await self.UpdateThumbnailUrlInAnalysisCRON(analysis_id, cut_analysis_thumbnail)
 													// console.log('Update in database successfully', cut_analysis_video);
 
 													await self.UpdateVideoInTbl(cut_file_name);
@@ -3642,6 +3646,7 @@ exports.CronJobUnzippingTaggingVideo = async (req, res) => {
 		if (allVideoFileTbl.length > 0) {
 			for (let i = 0; i < allVideoFileTbl.length; i++) {
 				let video_filepath = allVideoFileTbl[i]["filepath"];
+				//step 1
 				if (video_filepath == null) {
 					uploadedFileName = await this.UnzipMatchVideosFromZipCRON(allVideoFileTbl[i]["zip_filepath"]);
 					let updateFilenameInVideoFileTbl = await this.updateFilenameInVideoFileTblCRON(allVideoFileTbl[i]["fileid"], uploadedFileName);
@@ -3668,6 +3673,7 @@ exports.CronJobUnzippingTaggingVideo = async (req, res) => {
 	}
 };
 
+//shreya
 
 exports.tagToBallUsingFilenameCRON = async (uploadedFileName) => {
 	try {
@@ -3949,10 +3955,6 @@ exports.UploadUnzipFileToServerCRON = async (s3UploadPath, extractedPath, fileNa
 
 		const data = await s3.upload(params).promise();
 		console.log("S3 Main File Upload Successful:", data);
-
-		fs.unlink(`./public/video_zip/${thumbnail_fileName}`, (err) => {
-			console.log(err);
-		})
 
 		return { status: true, message: 'Upload successful' };
 	} catch (err) {
@@ -4484,6 +4486,7 @@ exports.GetCurrentBallVideo = async (req, res) => {
 	}
 };
 
+// starting edits here: shreya
 
 exports.UpdateThumbnailUrlInAnalysisCRON = async (analysis_id, analysis_thumbnail) => {
 	try {
