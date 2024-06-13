@@ -95,8 +95,6 @@ exports.GetMatchHightlights = async (req, res) => {
 };
 
 
-
-
 exports.AddVideo = async (req, res) => {
 	try {
 		if (req.body.category != undefined && req.body.title != undefined) {
@@ -106,7 +104,6 @@ exports.AddVideo = async (req, res) => {
 						learning_centre_id: req.body.sub_category1,
 						learning_centre_category_id: req.body.sub_category2,
 						title: req.body.title,
-						//generated image instead. 
 						image: "https://dev.wellplayed.in/storage/app/public/learning_centre/4lRcNhbOgnBZMQQa7gEREyik3ucwoS1tKCsIVWCE.jpg",
 						url: req.uploadedFile.Location,
 						color: "[]",
@@ -166,7 +163,6 @@ exports.AddVideo = async (req, res) => {
 							match_centre_category_id: req.body.sub_category2,
 							inning: req.body.inning,
 							title: req.body.title,
-							// generated image instead
 							image: "https://dev.wellplayed.in/storage/app/public/match_centre/yIitfK5GaybB01yrr3M1l358dARgWy6Zth14Ijpw.jpg",
 							url: req.uploadedFile.Location,
 							color: "[]",
@@ -185,7 +181,6 @@ exports.AddVideo = async (req, res) => {
 							match_centre_category_id: req.body.sub_category2,
 							inning: req.body.inning,
 							title: req.body.title,
-							//generated image instead
 							image: "https://dev.wellplayed.in/storage/app/public/match_centre/yIitfK5GaybB01yrr3M1l358dARgWy6Zth14Ijpw.jpg",
 							url: req.uploadedFile.Location,
 							color: "[]",
@@ -211,7 +206,6 @@ exports.AddVideo = async (req, res) => {
 				var video = await PostMessageVideo.create({
 					title: req.body.title,
 					message: req.body.message,
-					//generated image instead
 					image: "https://dev.wellplayed.in/storage/app/public/match_centre/yIitfK5GaybB01yrr3M1l358dARgWy6Zth14Ijpw.jpg",
 					url: req.uploadedFile.Location,
 					color: "[]",
@@ -392,10 +386,13 @@ exports.AddMatchVideo = async (req, res) => {
 
 exports.AddMatchVideoStatus = async (req, res) => {
 	try {
-		var videoExist2 = await VideoFileTbl.findAll({
+		var videoExist2 = await VideoFileTbl.findOne({
 			where: {
 				zip_filepath: req.body.filename
 			},
+			order: [
+				["id", "DESC"]
+			]
 		});
 		if (videoExist2 == "") {
 			var video = await VideoFileTbl.create({
@@ -1564,9 +1561,7 @@ exports.CropAndTagAllLiveVideo = async (req, res) => {
 														await self.UploadAWSCutVideo(s3UploadPath, extractedPath, fileName);
 
 														const cut_analysis_video = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/well_played_tournament/" + cut_file_name;
-														const cut_analysis_thumbnail = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/well_played_tournament/video_thumbnails" + cut_file_name;
 														await self.UpdateVideoUrlInAnalysis(analysis_id, cut_analysis_video)
-														await self.UpdateThumbnailUrlInAnalysisCRON(analysis_id, cut_analysis_thumbnail)
 
 														await self.UpdateVideoInTbl(cut_file_name);
 
@@ -3365,8 +3360,9 @@ exports.refreshServerUsingShell = async (req, res) => {
 exports.ZipFileUploadInAWSBucketDirect = async (req, res) => {
 	try {
 
-		const start_upload = await this.addVideoUploadingLog("Start - AWS", req.body);
+
 		if (req.files != null) {
+			const start_upload = await this.addVideoUploadingLog("Start - AWS", req.body);
 			AWS.config.update({
 				region: process.env.S3_REGION,
 				accessKeyId: process.env.AWS_ACCESS_KEY,
@@ -3402,6 +3398,7 @@ exports.ZipFileUploadInAWSBucketDirect = async (req, res) => {
 					// Handle the error here if needed
 				});
 		} else {
+			const failed_zipping = await this.addVideoUploadingLog("Failed - Zipping", req.body);
 			collectErrorLog(path.basename(__filename), "ZipFileUploadInAWSBucketDirect", { "error": "Zip file is not received" }, req.body, "");
 			var selected_attachment_data = {
 				status: "uploadfailed"
@@ -3642,12 +3639,12 @@ exports.CronJobUnzippingTaggingVideo = async (req, res) => {
 		if (allVideoFileTbl.length > 0) {
 			for (let i = 0; i < allVideoFileTbl.length; i++) {
 				let video_filepath = allVideoFileTbl[i]["filepath"];
+
 				if (video_filepath == null) {
 					uploadedFileName = await this.UnzipMatchVideosFromZipCRON(allVideoFileTbl[i]["zip_filepath"]);
 					let updateFilenameInVideoFileTbl = await this.updateFilenameInVideoFileTblCRON(allVideoFileTbl[i]["fileid"], uploadedFileName);
 					// uploadedFileName = "Nilesh Tournament Match_Ball Restriction Testing_NCA -U19A_2024-02-06_Over_FI_1.1_559529.mp4";
 					let tag_to_ball_using_filename = await this.tagToBallUsingFilenameCRON(uploadedFileName);
-
 				}
 			}
 		}
@@ -3668,21 +3665,34 @@ exports.CronJobUnzippingTaggingVideo = async (req, res) => {
 	}
 };
 
-
 exports.tagToBallUsingFilenameCRON = async (uploadedFileName) => {
 	try {
 		let split_file_name = uploadedFileName.split('_');
-
 		if (split_file_name.length == 7) {
+			let Tournament_Name = split_file_name.length > 0 ? split_file_name[0] : "";
 			let Match_Name = split_file_name.length > 1 ? split_file_name[1] : "";
+			let Match_Date = split_file_name.length > 3 ? split_file_name[3] : "";
 			let Inning_Name = split_file_name.length > 5 ? split_file_name[5] : "";
 			let Over_Name = split_file_name.length > 6 ? split_file_name[6] : "";
-
+			let tournament_id = "";
+			if (Tournament_Name != "") {
+				var tournament_exist = await db.Tournament.findOne({
+					where: {
+						name: Tournament_Name
+					},
+					attributes: ["id"]
+				})
+				if (tournament_exist) {
+					tournament_id = tournament_exist.dataValues.id;
+				}
+			}
 			let match_id = "";
 			if (Match_Name != "") {
 				var match_exist = await db.Match.findOne({
 					where: {
-						name: Match_Name
+						tournament_id: tournament_id,
+						name: Match_Name,
+						date: Match_Date
 					},
 					attributes: ["id"]
 				})
@@ -3690,14 +3700,13 @@ exports.tagToBallUsingFilenameCRON = async (uploadedFileName) => {
 					match_id = match_exist.dataValues.id;
 				}
 			}
-
+			//console.log("tttt tournament_id", tournament_id);
 			let inning = "";
 			if (Inning_Name === 'FI') {
 				inning = 1;
 			} else if (Inning_Name === 'SI') {
 				inning = 2;
 			}
-
 			let floatOver = "";
 			if (Over_Name != "") {
 				floatOver = Over_Name.replace(/\.[^/.]+$/, "");
@@ -3706,6 +3715,7 @@ exports.tagToBallUsingFilenameCRON = async (uploadedFileName) => {
 			if ((match_id != "") && (inning != "") && (floatOver != "")) {
 				var analysis_exist = await db.Analysis.findOne({
 					where: {
+						tournament_id: tournament_id,
 						match_id: match_id,
 						current_ball: floatOver,
 						current_inning: inning
@@ -3714,29 +3724,40 @@ exports.tagToBallUsingFilenameCRON = async (uploadedFileName) => {
 				})
 				if (analysis_exist) {
 					analysis_id = analysis_exist.dataValues.id;
-					const analysis_video = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/well_played_tournament/" + uploadedFileName;
-					const thumbnail_fileName = `${uploadedFileName.slice(0, -4)}.png`;
-					const analysis_thumbnail = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/video_thumbnails/" + thumbnail_fileName;
+					let analysis_video = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/well_played_tournament/" + uploadedFileName;
 					await this.UpdateVideoUrlInAnalysisCRON(analysis_id, analysis_video)
-					await this.UpdateThumbnailUrlInAnalysisCRON(analysis_id, analysis_thumbnail)
 				}
 			}
 		} else if (split_file_name.length == 8) {
+			let Tournament_Name = split_file_name.length > 0 ? split_file_name[0] : "";
 			let Match_Name = split_file_name.length > 1 ? split_file_name[1] : "";
+			let Match_Date = split_file_name.length > 3 ? split_file_name[3] : "";
 			let Inning_Name = split_file_name.length > 5 ? split_file_name[5] : "";
 			let Over_Name = split_file_name.length > 6 ? split_file_name[6] : "";
 			let Six_Digit_Number_Name = split_file_name.length > 7 ? split_file_name[7] : "";
-
 			let Six_Digit_Number = "";
 			if (Six_Digit_Number_Name != "") {
 				Six_Digit_Number = Six_Digit_Number_Name.replace(/\.[^/.]+$/, "");
 			}
-
+			let tournament_id = "";
+			if (Tournament_Name != "") {
+				var tournament_exist = await db.Tournament.findOne({
+					where: {
+						name: Tournament_Name
+					},
+					attributes: ["id"]
+				})
+				if (tournament_exist) {
+					tournament_id = tournament_exist.dataValues.id;
+				}
+			}
 			let match_id = "";
 			if (Match_Name != "") {
 				var match_exist = await db.Match.findOne({
 					where: {
-						name: Match_Name
+						tournament_id: tournament_id,
+						name: Match_Name,
+						date: Match_Date
 					},
 					attributes: ["id"]
 				})
@@ -3744,23 +3765,21 @@ exports.tagToBallUsingFilenameCRON = async (uploadedFileName) => {
 					match_id = match_exist.dataValues.id;
 				}
 			}
-
 			let inning = "";
 			if (Inning_Name === 'FI') {
 				inning = 1;
 			} else if (Inning_Name === 'SI') {
 				inning = 2;
 			}
-
 			let floatOver = "";
 			if (Over_Name != "") {
 				floatOver = Over_Name;
 			}
-
 			let analysis_id = "";
 			if ((match_id != "") && (inning != "") && (floatOver != "") && (Six_Digit_Number != "")) {
 				var analysis_exist = await db.Analysis.findOne({
 					where: {
+						tournament_id: tournament_id,
 						match_id: match_id,
 						current_ball: floatOver,
 						current_inning: inning,
@@ -3771,26 +3790,19 @@ exports.tagToBallUsingFilenameCRON = async (uploadedFileName) => {
 				if (analysis_exist) {
 					analysis_id = analysis_exist.dataValues.id;
 					let analysis_video = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/well_played_tournament/" + uploadedFileName;
-					const thumbnail_fileName = `${uploadedFileName.slice(0, -4)}.png`;
-					let analysis_thumbnail = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/video_thumbnails/" + thumbnail_fileName;
 					await this.UpdateVideoUrlInAnalysisCRON(analysis_id, analysis_video)
-					await this.UpdateThumbnailUrlInAnalysisCRON(analysis_id, analysis_thumbnail)
-					console.log('completed Thumbnail update in analysis table')
 				}
 			}
 		}
-
 		return true;
 	} catch (err) {
 		collectErrorLog(path.basename(__filename), "tagToBallUsingFilenameCRON", err, uploadedFileName, "");
-
 		return true;
 	}
 }
 
 exports.UpdateVideoUrlInAnalysisCRON = async (analysis_id, analysis_video) => {
 	try {
-		console.log(analysis_id, analysis_video)
 		var analysis = await db.Analysis.update({
 			video_url: analysis_video
 		}, {
@@ -3809,7 +3821,6 @@ exports.UpdateVideoUrlInAnalysisCRON = async (analysis_id, analysis_video) => {
 		return false;
 	}
 };
-
 
 exports.UnzipMatchVideosFromZipCRON = async (zipName) => {
 	const stream = require('stream');
@@ -3854,7 +3865,6 @@ exports.UnzipMatchVideosFromZipCRON = async (zipName) => {
 			await readableStream.pipe(Unzipper.Extract({ path: extractedPath })).promise();
 
 			const s3UploadPath = 'well_played_tournament/';
-			//step 2
 
 			await this.UploadUnzipFileToServerCRON(s3UploadPath, extractedPath, fileName);
 			console.log("Upload Process - 2")
@@ -3883,7 +3893,6 @@ exports.UnzipMatchVideosFromZipCRON = async (zipName) => {
 };
 
 
-
 exports.UploadUnzipFileToServerCRON = async (s3UploadPath, extractedPath, fileName) => {
 	try {
 		AWS.config.update({
@@ -3893,12 +3902,9 @@ exports.UploadUnzipFileToServerCRON = async (s3UploadPath, extractedPath, fileNa
 		});
 		const s3 = new AWS.S3();
 
-		const fs = require('fs');
-		const util = require('util');
-		const readFile = util.promisify(fs.readFile);
-		const createReadStream = util.promisify(fs.createReadStream);
+		const fs_new = require('fs').promises;
 
-		const fileContent = await readFile(`${extractedPath}/${fileName}`);
+		const fileContent = await fs_new.readFile(`${extractedPath}/${fileName}`);
 
 		const params = {
 			Bucket: process.env.AWS_BUCKET_NAME,
@@ -3906,57 +3912,10 @@ exports.UploadUnzipFileToServerCRON = async (s3UploadPath, extractedPath, fileNa
 			Body: fileContent,
 		};
 
-		const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
-		const ffmpeg = require('fluent-ffmpeg');
-		ffmpeg.setFfmpegPath(ffmpegPath);
-		const thumbnail_fileName = `${fileName.slice(0, -4)}.png`;
-
-		const thumbnailPromise = new Promise((resolve, reject) => {
-			ffmpeg(`./public/video_zip/${fileName}`)
-				.on('end', async function (files) {
-					console.log('screenshots were saved as ' + files);
-					resolve();
-				})
-				.screenshots({
-					timestamps: [0],
-					filename: thumbnail_fileName,
-					folder: './public/video_zip',
-				})
-				.on('error', function (err) {
-					console.log('an error happened: ' + err.message);
-					reject(err);
-				});
-		});
-
-		await thumbnailPromise;
-
-		const thumbnail_s3UploadPath = `video_thumbnails/`;
-
-		const thumbnail_params = {
-			Bucket: process.env.AWS_BUCKET_NAME,
-			Key: `${thumbnail_s3UploadPath}${thumbnail_fileName}`,
-			Body: fs.createReadStream(`./public/video_zip/${thumbnail_fileName}`),
-		};
-		console.log('here');
-
-		try {
-			const thumbnail_data = await s3.upload(thumbnail_params).promise();
-			console.log("S3 Thumbnail Upload Successful:", thumbnail_data);
-		} catch (err) {
-			console.error("Error during S3 Thumbnail Upload:", err);
-			throw err; // Rethrow the error to handle it in the outer catch block
-		}
-
-		const data = await s3.upload(params).promise();
-		console.log("S3 Main File Upload Successful:", data);
-
-		fs.unlink(`./public/video_zip/${thumbnail_fileName}`, (err) => {
-			console.log(err);
-		})
+		const data = await s3.upload(params).promise(); // Use .promise() to await the upload operation
 
 		return { status: true, message: 'Upload successful' };
 	} catch (err) {
-		console.error("Error occurred during upload:", err);
 		let combine_return_variable = {};
 		combine_return_variable["s3UploadPath"] = s3UploadPath;
 		combine_return_variable["extractedPath"] = extractedPath;
@@ -3964,11 +3923,9 @@ exports.UploadUnzipFileToServerCRON = async (s3UploadPath, extractedPath, fileNa
 
 		collectErrorLog(path.basename(__filename), "UploadUnzipFileToServerCRON", err, combine_return_variable, "");
 
-		return { status: false, message: 'Error occurred during upload' };
+		return false;
 	}
 };
-
-
 
 exports.updateFilenameInVideoFileTblCRON = async (fileid, filepath) => {
 	try {
@@ -4044,7 +4001,7 @@ exports.ManualJobUnzippingTaggingVideo = async (req, res) => {
 
 		let uploadedFileName = "";
 		let final_filename = "";
-		console.log("allVideoFileTbl", allVideoFileTbl)
+		//console.log("allVideoFileTbl", allVideoFileTbl)
 		if (allVideoFileTbl.length > 0) {
 			for (let i = 0; i < allVideoFileTbl.length; i++) {
 				let video_filepath = allVideoFileTbl[i]["filepath"];
@@ -4283,17 +4240,32 @@ exports.updateFilenameInVideoFileTblManual = async (fileid, filepath) => {
 exports.tagToBallUsingFilenameManual = async (uploadedFileName) => {
 	try {
 		let split_file_name = uploadedFileName.split('_');
-
 		if (split_file_name.length == 7) {
+			let Tournament_Name = split_file_name.length > 0 ? split_file_name[0] : "";
 			let Match_Name = split_file_name.length > 1 ? split_file_name[1] : "";
 			let Inning_Name = split_file_name.length > 5 ? split_file_name[5] : "";
+			let Match_Date = split_file_name.length > 3 ? split_file_name[3] : "";
 			let Over_Name = split_file_name.length > 6 ? split_file_name[6] : "";
+			let tournament_id = "";
+			if (Tournament_Name != "") {
+				var tournament_exist = await db.Tournament.findOne({
+					where: {
+						name: Tournament_Name
+					},
+					attributes: ["id"]
+				})
+				if (tournament_exist) {
+					tournament_id = tournament_exist.dataValues.id;
+				}
+			}
 
 			let match_id = "";
 			if (Match_Name != "") {
 				var match_exist = await db.Match.findOne({
 					where: {
-						name: Match_Name
+						tournament_id: tournament_id,
+						name: Match_Name,
+						date: Match_Date
 					},
 					attributes: ["id"]
 				})
@@ -4301,14 +4273,12 @@ exports.tagToBallUsingFilenameManual = async (uploadedFileName) => {
 					match_id = match_exist.dataValues.id;
 				}
 			}
-
 			let inning = "";
 			if (Inning_Name === 'FI') {
 				inning = 1;
 			} else if (Inning_Name === 'SI') {
 				inning = 2;
 			}
-
 			let floatOver = "";
 			if (Over_Name != "") {
 				floatOver = Over_Name.replace(/\.[^/.]+$/, "");
@@ -4317,6 +4287,7 @@ exports.tagToBallUsingFilenameManual = async (uploadedFileName) => {
 			if ((match_id != "") && (inning != "") && (floatOver != "")) {
 				var analysis_exist = await db.Analysis.findOne({
 					where: {
+						tournament_id: tournament_id,
 						match_id: match_id,
 						current_ball: floatOver,
 						current_inning: inning
@@ -4330,21 +4301,35 @@ exports.tagToBallUsingFilenameManual = async (uploadedFileName) => {
 				}
 			}
 		} else if (split_file_name.length == 8) {
+			let Tournament_Name = split_file_name.length > 0 ? split_file_name[0] : "";
 			let Match_Name = split_file_name.length > 1 ? split_file_name[1] : "";
 			let Inning_Name = split_file_name.length > 5 ? split_file_name[5] : "";
+			let Match_Date = split_file_name.length > 3 ? split_file_name[3] : "";
 			let Over_Name = split_file_name.length > 6 ? split_file_name[6] : "";
 			let Six_Digit_Number_Name = split_file_name.length > 7 ? split_file_name[7] : "";
-
 			let Six_Digit_Number = "";
 			if (Six_Digit_Number_Name != "") {
 				Six_Digit_Number = Six_Digit_Number_Name.replace(/\.[^/.]+$/, "");
 			}
-
+			let tournament_id = "";
+			if (Tournament_Name != "") {
+				var tournament_exist = await db.Tournament.findOne({
+					where: {
+						name: Tournament_Name
+					},
+					attributes: ["id"]
+				})
+				if (tournament_exist) {
+					tournament_id = tournament_exist.dataValues.id;
+				}
+			}
 			let match_id = "";
 			if (Match_Name != "") {
 				var match_exist = await db.Match.findOne({
 					where: {
-						name: Match_Name
+						tournament_id: tournament_id,
+						name: Match_Name,
+						date: Match_Date
 					},
 					attributes: ["id"]
 				})
@@ -4352,23 +4337,21 @@ exports.tagToBallUsingFilenameManual = async (uploadedFileName) => {
 					match_id = match_exist.dataValues.id;
 				}
 			}
-
 			let inning = "";
 			if (Inning_Name === 'FI') {
 				inning = 1;
 			} else if (Inning_Name === 'SI') {
 				inning = 2;
 			}
-
 			let floatOver = "";
 			if (Over_Name != "") {
 				floatOver = Over_Name;
 			}
-
 			let analysis_id = "";
 			if ((match_id != "") && (inning != "") && (floatOver != "") && (Six_Digit_Number != "")) {
 				var analysis_exist = await db.Analysis.findOne({
 					where: {
+						tournament_id: tournament_id,
 						match_id: match_id,
 						current_ball: floatOver,
 						current_inning: inning,
@@ -4376,7 +4359,6 @@ exports.tagToBallUsingFilenameManual = async (uploadedFileName) => {
 					},
 					attributes: ["id"]
 				})
-				//reference
 				if (analysis_exist) {
 					analysis_id = analysis_exist.dataValues.id;
 					let analysis_video = "https://wellplayeds3bucket1.s3.ap-south-1.amazonaws.com/well_played_tournament/" + uploadedFileName;
@@ -4384,11 +4366,9 @@ exports.tagToBallUsingFilenameManual = async (uploadedFileName) => {
 				}
 			}
 		}
-
 		return true;
 	} catch (err) {
 		collectErrorLog(path.basename(__filename), "tagToBallUsingFilenameManual", err, uploadedFileName, "");
-
 		return true;
 	}
 }
@@ -4481,27 +4461,5 @@ exports.GetCurrentBallVideo = async (req, res) => {
 			status: false,
 			error: err,
 		});
-	}
-};
-
-
-exports.UpdateThumbnailUrlInAnalysisCRON = async (analysis_id, analysis_thumbnail) => {
-	try {
-		var analysis = await db.Analysis.update({
-			video_thumbnail_url: analysis_thumbnail
-		}, {
-			where: {
-				id: analysis_id
-			}
-		});
-		return true;
-	} catch (err) {
-		let combine_return_variable = {};
-		combine_return_variable["analysis_id"] = analysis_id;
-		combine_return_variable["analysis_thumbnail"] = analysis_thumbnail;
-
-		collectErrorLog(path.basename(__filename), "UpdateThumbnailUrlInAnalysisCRON", err, combine_return_variable, "");
-
-		return false;
 	}
 };
